@@ -1,0 +1,2 @@
+# String or number match in a query condition
+'([^']+)'|(\d+)
