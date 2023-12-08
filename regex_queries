@@ -1,3 +1,6 @@
 # String or number match in a query condition
 '([^']+)'|(\d+)
 '([^']+)'|(\d+)|([^']+)
+
+([A-Za-z_]+)::([A-Za-z_]+)\s*\(([^)]+)\) - matches sum ([EMPLOYEE::AGE]) 
+r"\b(\w+)\s+\[([^\]:]+)::([^\]]+)\]" - matches sum ([EMPLOYEE::AGE]) 
