@@ -1,0 +1,162 @@
+import re
+from typing import Dict
+
+def extract_ctes(query: str) -> Dict[str, str]:
+    """
+    Extracts all CTEs from a SQL query and returns them as a dictionary.
+    
+    Args:
+        query: SQL query string containing CTEs
+        
+    Returns:
+        Dictionary where keys are CTE names and values are CTE SQL definitions
+    """
+    ctes = {}
+    
+    # Remove comments
+    query = re.sub(r'--.*?$', '', query, flags=re.MULTILINE)
+    query = re.sub(r'/\*.*?\*/', '', query, flags=re.DOTALL)
+    
+    # Find WITH clause
+    with_match = re.search(r'\bWITH\b', query, re.IGNORECASE)
+    if not with_match:
+        return ctes
+    
+    # Get the portion after WITH
+    remaining = query[with_match.end():].strip()
+    
+    # Track parentheses to find CTE boundaries
+    i = 0
+    while i < len(remaining):
+        # Skip whitespace
+        while i < len(remaining) and remaining[i].isspace():
+            i += 1
+        
+        if i >= len(remaining):
+            break
+            
+        # Check if we've reached the main query
+        main_query_keywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
+        substr = remaining[i:i+10].upper()
+        is_main_query = any(substr.startswith(kw) for kw in main_query_keywords)
+        
+        # Look for potential main SELECT (not part of CTE)
+        if is_main_query:
+            # Check if this SELECT is not part of a CTE definition
+            before = remaining[:i].rstrip()
+            if not before or before.endswith(',') or before.upper().endswith('WITH'):
+                continue
+            else:
+                break
+        
+        # Extract CTE name
+        name_match = re.match(r'(\w+)', remaining[i:])
+        if not name_match:
+            i += 1
+            continue
+            
+        cte_name = name_match.group(1)
+        i += len(cte_name)
+        
+        # Skip whitespace and optional column list
+        while i < len(remaining) and remaining[i].isspace():
+            i += 1
+        
+        # Handle optional column list in parentheses
+        if i < len(remaining) and remaining[i] == '(':
+            paren_count = 1
+            i += 1
+            while i < len(remaining) and paren_count > 0:
+                if remaining[i] == '(':
+                    paren_count += 1
+                elif remaining[i] == ')':
+                    paren_count -= 1
+                i += 1
+        
+        # Skip whitespace
+        while i < len(remaining) and remaining[i].isspace():
+            i += 1
+        
+        # Expect AS keyword
+        if i + 2 <= len(remaining) and remaining[i:i+2].upper() == 'AS':
+            i += 2
+        else:
+            i += 1
+            continue
+        
+        # Skip whitespace
+        while i < len(remaining) and remaining[i].isspace():
+            i += 1
+        
+        # Expect opening parenthesis
+        if i >= len(remaining) or remaining[i] != '(':
+            i += 1
+            continue
+        
+        # Extract CTE definition
+        start = i + 1
+        paren_count = 1
+        i += 1
+        
+        while i < len(remaining) and paren_count > 0:
+            if remaining[i] == '(':
+                paren_count += 1
+            elif remaining[i] == ')':
+                paren_count -= 1
+            i += 1
+        
+        cte_sql = remaining[start:i-1].strip()
+        ctes[cte_name] = cte_sql
+        
+        # Skip whitespace and comma
+        while i < len(remaining) and remaining[i].isspace():
+            i += 1
+        
+        if i < len(remaining) and remaining[i] == ',':
+            i += 1
+    
+    return ctes
+
+
+# Example usage
+if __name__ == "__main__":
+    # Test query with multiple CTEs
+    test_query = """
+    WITH 
+        sales_cte AS (
+            SELECT 
+                customer_id,
+                SUM(amount) as total_sales
+            FROM orders
+            WHERE year = 2024
+            GROUP BY customer_id
+        ),
+        customers_cte AS (
+            SELECT 
+                id,
+                name,
+                region
+            FROM customers
+            WHERE active = true
+        ),
+        final_cte AS (
+            SELECT 
+                c.name,
+                c.region,
+                s.total_sales
+            FROM customers_cte c
+            JOIN sales_cte s ON c.id = s.customer_id
+        )
+    SELECT * FROM final_cte
+    WHERE total_sales > 1000
+    ORDER BY total_sales DESC;
+    """
+    
+    result = extract_ctes(test_query)
+    
+    print("Extracted CTEs:")
+    print("=" * 50)
+    for cte_name, cte_sql in result.items():
+        print(f"\nCTE Name: {cte_name}")
+        print(f"SQL:\n{cte_sql}")
+        print("-" * 50)
